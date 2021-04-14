@@ -71,7 +71,7 @@ class ParticleFilter:
         self.odom_frame = "odom"
         self.scan_topic = "scan"
 
-        # inialize our map
+        # initialize our map
         self.map = OccupancyGrid()
 
         # the number of particles used in the particle filter
@@ -173,11 +173,11 @@ class ParticleFilter:
         if not(self.initialized):
             return
 
-        # we need to be able to transfrom the laser frame to the base frame
+        # we need to be able to transform the laser frame to the base frame
         if not(self.tf_listener.canTransform(self.base_frame, data.header.frame_id, data.header.stamp)):
             return
 
-        # wait for a little bit for the transform to become avaliable (in case the scan arrives
+        # wait for a little bit for the transform to become available (in case the scan arrives
         # a little bit before the odom to base_footprint transform was updated) 
         self.tf_listener.waitForTransform(self.base_frame, self.odom_frame, data.header.stamp, rospy.Duration(0.5))
         if not(self.tf_listener.canTransform(self.base_frame, data.header.frame_id, data.header.stamp)):
