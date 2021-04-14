@@ -51,6 +51,9 @@ class Particle:
         # particle weight
         self.w = w
 
+    def __repr__(self):
+        return f"{self.pose.position.x}, {self.pose.position.y}"
+
 
 
 class ParticleFilter:
@@ -123,8 +126,26 @@ class ParticleFilter:
 
     def initialize_particle_cloud(self):
         
-        # TODO
-
+        # find all of the open tiles, and then pick 10000 random ones 
+        open_tiles = [] 
+        for i in range(self.map.info.width):
+            for j in range(self.map.info.height):
+                ind = i + j*self.map.info.width
+                if self.map.data[ind] == 0:
+                    open_tiles.append((i, j))
+        for tile in np.random.choice(range(len(open_tiles)), size=self.num_particles):
+            i, j = open_tiles[tile]
+            pose = Pose()
+            pose.position.x = i * self.map.info.resolution + self.map.info.origin.position.x
+            pose.position.y = j * self.map.info.resolution + self.map.info.origin.position.y
+            pose.position.z = 0
+            q_x, q_y, q_z, q_w = quaternion_from_euler(0, 0, random() * 2 * math.pi)
+            pose.orientation.x = q_x
+            pose.orientation.y = q_y
+            pose.orientation.z = q_z
+            pose.orientation.w = q_w
+            p = Particle(pose, 1 / self.num_particles)
+            self.particle_cloud.append(p)
 
         self.normalize_particles()
 
@@ -135,14 +156,14 @@ class ParticleFilter:
         # make all the particle weights sum to 1.0
         
         # TODO
+        pass
 
 
 
     def publish_particle_cloud(self):
-
         particle_cloud_pose_array = PoseArray()
         particle_cloud_pose_array.header = Header(stamp=rospy.Time.now(), frame_id=self.map_topic)
-        particle_cloud_pose_array.poses
+        particle_cloud_pose_array.poses = []
 
         for part in self.particle_cloud:
             particle_cloud_pose_array.poses.append(part.pose)
@@ -165,6 +186,7 @@ class ParticleFilter:
 
         # TODO
 
+        pass
 
 
     def robot_scan_received(self, data):
@@ -244,12 +266,13 @@ class ParticleFilter:
         
         # TODO
 
+        pass
 
     
     def update_particle_weights_with_measurement_model(self, data):
 
         # TODO
-
+        pass
 
         
 
@@ -257,10 +280,35 @@ class ParticleFilter:
 
         # based on the how the robot has moved (calculated from its odometry), we'll  move
         # all of the particles correspondingly
+        curr_x = self.odom_pose.pose.position.x
+        old_x = self.odom_pose_last_motion_update.pose.position.x
+        curr_y = self.odom_pose.pose.position.y
+        old_y = self.odom_pose_last_motion_update.pose.position.y
+        curr_yaw = get_yaw_from_pose(self.odom_pose.pose)
+        old_yaw = get_yaw_from_pose(self.odom_pose_last_motion_update.pose)
+        
+        delta_x = curr_x - old_x
+        delta_y = curr_y - old_y
+        delta_yaw = curr_yaw - old_yaw
 
-        # TODO
-
-
+        for particle in self.particle_cloud:
+            # TODO add noise
+            roll, pitch, yaw = euler_from_quaternion([particle.pose.orientation.x, particle.pose.orientation.y, particle.pose.orientation.z, particle.pose.orientation.w])
+            
+            # TODO should this be old_yaw or current_yaw
+            angle = yaw - old_yaw
+            particle.pose.position.x += delta_x * math.cos(angle) - delta_y * math.sin(angle)
+            particle.pose.position.y += delta_x * math.sin(angle) + delta_y * math.cos(angle)
+            yaw += delta_yaw
+            if yaw > 2 * math.pi:
+                yaw -= 2 * math.pi
+            if yaw < 0:
+                yaw += 2 * math.pi
+            q_x, q_y, q_z, q_w = quaternion_from_euler(roll, pitch, yaw)
+            particle.pose.orientation.x = q_x
+            particle.pose.orientation.y = q_y
+            particle.pose.orientation.z = q_z
+            particle.pose.orientation.w = q_w
 
 if __name__=="__main__":
     
