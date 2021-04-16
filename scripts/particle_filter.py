@@ -204,8 +204,10 @@ class ParticleFilter:
 
 
     def resample_particles(self):
-        # Resample a new particle cloud using the weights
-        # of the particles
+        """
+        Resample a new particle cloud using the weights
+        of the particles.
+        """
         self.particle_cloud = draw_random_sample(self.particle_cloud, [p.w for p in self.particle_cloud])
 
 
