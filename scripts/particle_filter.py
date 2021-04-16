@@ -153,10 +153,7 @@ class ParticleFilter:
             pose.position.y = j * self.map.info.resolution + self.map.info.origin.position.y
             pose.position.z = 0
             q_x, q_y, q_z, q_w = quaternion_from_euler(0, 0, random() * 2 * math.pi)
-            pose.orientation.x = q_x
-            pose.orientation.y = q_y
-            pose.orientation.z = q_z
-            pose.orientation.w = q_w
+            pose.orientation = Quaternion(q_x, q_y, q_z, q_w)
             p = Particle(pose, 1 / self.num_particles)
             self.particle_cloud.append(p)
 
@@ -274,10 +271,22 @@ class ParticleFilter:
 
     def update_estimated_robot_pose(self):
         # based on the particles within the particle cloud, update the robot pose estimate
-        
-        # TODO
-
-        pass
+        total_x = 0
+        total_y = 0
+        total_yaw_x = 0
+        total_yaw_y = 0
+        # TODO check when yaw is around 0
+        for p in self.particle_cloud:
+            total_x += p.pose.position.x
+            total_y += p.pose.position.y
+            p_yaw = get_yaw_from_pose(p.pose)
+            total_yaw_x += math.cos(p_yaw)
+            total_yaw_y += math.sin(p_yaw)
+        average_yaw = math.atan2(total_yaw_y, total_yaw_x)
+        self.robot_estimate.position.x = total_x / self.num_particles
+        self.robot_estimate.position.y = total_y / self.num_particles
+        q_x, q_y, q_z, q_w = quaternion_from_euler(0, 0, average_yaw)
+        self.robot_estimate.orientation = Quaternion(q_x, q_y, q_z, q_w) 
 
     
     def update_particle_weights_with_measurement_model(self, data):
@@ -324,10 +333,8 @@ class ParticleFilter:
             delta_y = curr_y - old_y + random() * noise_const - noise_const/2
             delta_yaw = curr_yaw - old_yaw + random() * noise_const - noise_const/2
 
-            # TODO add noise
             roll, pitch, yaw = euler_from_quaternion([particle.pose.orientation.x, particle.pose.orientation.y, particle.pose.orientation.z, particle.pose.orientation.w])
             
-            # TODO should this be old_yaw or current_yaw
             angle = yaw - old_yaw
             particle.pose.position.x += delta_x * math.cos(angle) - delta_y * math.sin(angle)
             particle.pose.position.y += delta_x * math.sin(angle) + delta_y * math.cos(angle)
