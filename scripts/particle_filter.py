@@ -316,6 +316,9 @@ class ParticleFilter:
         # We experimented with different amounts of angles,
         # and 8 seemed to provided the best accuracy and consistency.
         directions_idxs = [0,45,90,135,180,225,270,315]
+        inf_measurement_weight = 0.05
+        measurement_sd = 0.1
+        small_weight = 0.000001
 
         # For each particle, compute its weight using 
         # a likelihood field
@@ -334,7 +337,7 @@ class ParticleFilter:
                     # If the sensor is too far away to see 
                     # anything, we can't get any useful data from it,
                     # so instead just weight this particle lower.
-                    q = q * 0.05
+                    q = q * inf_measurement_weight
                     continue
                 x_z = p_x + sensor_distance * math.cos(p_theta + math.radians(direction))
                 y_z = p_y + sensor_distance * math.sin(p_theta + math.radians(direction))
@@ -343,11 +346,11 @@ class ParticleFilter:
                 # with the likelihood field. The standard deviation of 0.1 seems like 
                 # a reasonable value given the variation we have observed in the robots
                 # LIDAR. It has been working fairly well for us in practice.
-                q = q * compute_prob_zero_centered_gaussian(nearest_obstacle, 0.1)
+                q = q * compute_prob_zero_centered_gaussian(nearest_obstacle, measurement_sd)
             # To avoid nans, and also situations where all weights are 0,
             # replace these weights with a very small weight.
             if math.isnan(q) or q == 0:
-                q = 0.000001
+                q = small_weight
             particle.w = q
         
 
