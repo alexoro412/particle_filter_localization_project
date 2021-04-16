@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import rospy
-
 import copy
 
 from likelihood_field import LikelihoodField
@@ -22,8 +21,6 @@ import math
 
 from random import randint, random
 
-
-
 def get_yaw_from_pose(p):
     """ A helper function that takes in a Pose object (geometry_msgs) and returns yaw"""
 
@@ -39,7 +36,10 @@ def get_yaw_from_pose(p):
 
 def draw_random_sample(sample, weight):
     """ Draws a random sample of n elements from a given list of choices and their specified probabilities.
-    We recommend that you fill in this function using random_sample.
+
+    Uses numpy's random choice function.
+    Particles must be deep copied because they are modified in place
+    when updating the motion model.
     """
     new_cloud =  choice(sample, p=weight, size=len(sample))
     new_cloud = [copy.deepcopy(p) for p in new_cloud]
@@ -47,7 +47,9 @@ def draw_random_sample(sample, weight):
 
 def compute_prob_zero_centered_gaussian(dist, sd):
     """ Takes in distance from zero (dist) and standard deviation (sd) for gaussian
-        and returns probability (likelihood) of observation """
+        and returns probability (likelihood) of observation 
+
+    Taken from the starter code provided in class. """
     c = 1.0 / (sd * math.sqrt(2 * math.pi))
     prob = c * math.exp((-math.pow(dist,2))/(2 * math.pow(sd, 2)))
     return prob
@@ -74,7 +76,6 @@ class ParticleFilter:
 
         # once everything is setup initialized will be set to true
         self.initialized = False        
-
 
         # initialize this particle filter node
         rospy.init_node('turtlebot3_particle_filter')
@@ -138,7 +139,11 @@ class ParticleFilter:
     
 
     def initialize_particle_cloud(self):
-        
+        """
+        Generates the initial particle cloud
+        with particles placed randomly in 
+        open spaces in the map.
+        """
         # find all of the open tiles, and then pick 10000 random ones 
         open_tiles = [] 
         for i in range(self.map.info.width):
@@ -146,9 +151,14 @@ class ParticleFilter:
                 ind = i + j*self.map.info.width
                 if self.map.data[ind] == 0:
                     open_tiles.append((i, j))
+
         for tile in np.random.choice(range(len(open_tiles)), size=self.num_particles):
+            # Select tiles by index, because numpy complains about
+            # multi-dimensional data if we call `choice` directly
+            # only the `open_tiles` array
             i, j = open_tiles[tile]
             pose = Pose()
+            # Generate random position and yaw, and create a particle
             pose.position.x = i * self.map.info.resolution + self.map.info.origin.position.x
             pose.position.y = j * self.map.info.resolution + self.map.info.origin.position.y
             pose.position.z = 0
@@ -163,8 +173,9 @@ class ParticleFilter:
 
 
     def normalize_particles(self):
-        # make all the particle weights sum to 1.0
-        
+        """
+        Make all the particle weights sum to 1.0
+        """
         total_weight = np.sum([p.w for p in self.particle_cloud])
         for p in self.particle_cloud:
             p.w = p.w / total_weight
@@ -193,7 +204,8 @@ class ParticleFilter:
 
 
     def resample_particles(self):
-        #calls draw_random_sample (?)
+        # Resample a new particle cloud using the weights
+        # of the particles
         self.particle_cloud = draw_random_sample(self.particle_cloud, [p.w for p in self.particle_cloud])
 
 
@@ -270,12 +282,19 @@ class ParticleFilter:
 
 
     def update_estimated_robot_pose(self):
-        # based on the particles within the particle cloud, update the robot pose estimate
+        """
+        Average all of the particles positions and yaws
+        to produce an estimate of where the robot is.
+        """
         total_x = 0
         total_y = 0
+        # Yaw is averaged by converting each yaw into
+        # a point on the unit circle, and then averaging those.
+        # This helps avoid the situation where some yaws are 0 degrees,
+        # and some are 359 degrees, so the average of just
+        # the angles would point in the opposite direction.
         total_yaw_x = 0
         total_yaw_y = 0
-        # TODO check when yaw is around 0
         for p in self.particle_cloud:
             total_x += p.pose.position.x
             total_y += p.pose.position.y
@@ -290,8 +309,16 @@ class ParticleFilter:
 
     
     def update_particle_weights_with_measurement_model(self, data):
+        """
+        Computes new weights for each particle based on
+        the robot's LIDAR data
+        """
+        # We experimented with different amounts of angles,
+        # and 8 seemed to provided the best accuracy and consistency.
         directions_idxs = [0,45,90,135,180,225,270,315]
 
+        # For each particle, compute its weight using 
+        # a likelihood field
         for particle in self.particle_cloud:
             p_theta = euler_from_quaternion([
                 particle.pose.orientation.x,
@@ -300,27 +327,41 @@ class ParticleFilter:
                 particle.pose.orientation.w])[2]
             p_x = particle.pose.position.x
             p_y = particle.pose.position.y
-            q = 1
+            q = 1 # initial particle weight
             for direction in directions_idxs:
                 sensor_distance = data.ranges[direction]
                 if sensor_distance > data.range_max:                  
+                    # If the sensor is too far away to see 
+                    # anything, we can't get any useful data from it,
+                    # so instead just weight this particle lower.
                     q = q * 0.05
                     continue
                 x_z = p_x + sensor_distance * math.cos(p_theta + math.radians(direction))
                 y_z = p_y + sensor_distance * math.sin(p_theta + math.radians(direction))
                 nearest_obstacle = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
+                # Lower the weight based on how well the sensor measurement lines up
+                # with the likelihood field. The standard deviation of 0.1 seems like 
+                # a reasonable value given the variation we have observed in the robots
+                # LIDAR. It has been working fairly well for us in practice.
                 q = q * compute_prob_zero_centered_gaussian(nearest_obstacle, 0.1)
+            # To avoid nans, and also situations where all weights are 0,
+            # replace these weights with a very small weight.
             if math.isnan(q) or q == 0:
                 q = 0.000001
-            if math.isinf(q):
-                print("------------------------ Found an inf ------------------------")
             particle.w = q
         
 
     def update_particles_with_motion_model(self):
+        """
+        Moves the particles based on how the robot has
+        moved according to its odometry data.
+        """
+        # We experimented with different noise constants,
+        # and found that this one provided fairly robust results
+        # while also keeping the particle cloud rather tight.
         noise_const = 0.05
-        # based on the how the robot has moved (calculated from its odometry), we'll  move
-        # all of the particles correspondingly
+
+        # Get the robots movement from its odometry
         curr_x = self.odom_pose.pose.position.x
         old_x = self.odom_pose_last_motion_update.pose.position.x
         curr_y = self.odom_pose.pose.position.y
@@ -329,12 +370,14 @@ class ParticleFilter:
         old_yaw = get_yaw_from_pose(self.odom_pose_last_motion_update.pose)
 
         for particle in self.particle_cloud:
+            # Compute the movement, plus a bit of uniform noise
             delta_x = curr_x - old_x + random() * noise_const - noise_const/2
             delta_y = curr_y - old_y + random() * noise_const - noise_const/2
             delta_yaw = curr_yaw - old_yaw + random() * noise_const - noise_const/2
 
             roll, pitch, yaw = euler_from_quaternion([particle.pose.orientation.x, particle.pose.orientation.y, particle.pose.orientation.z, particle.pose.orientation.w])
             
+            # How far should the particle rotate
             angle = yaw - old_yaw
             particle.pose.position.x += delta_x * math.cos(angle) - delta_y * math.sin(angle)
             particle.pose.position.y += delta_x * math.sin(angle) + delta_y * math.cos(angle)
@@ -344,23 +387,8 @@ class ParticleFilter:
             if yaw < 0:
                 yaw += 2 * math.pi
             q_x, q_y, q_z, q_w = quaternion_from_euler(roll, pitch, yaw)
-            particle.pose.orientation.x = q_x
-            particle.pose.orientation.y = q_y
-            particle.pose.orientation.z = q_z
-            particle.pose.orientation.w = q_w
+            particle.pose.orientation = Quaternion(q_x, q_y, q_z, q_w)
 
 if __name__=="__main__":
-    
-
     pf = ParticleFilter()
-
     rospy.spin()
-
-
-
-
-
-
-
-
-
