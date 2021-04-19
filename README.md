@@ -80,6 +80,8 @@ If we had more time, we would spend more time fine tuning the various parameters
 
 ---
 
+# Initial Implementation Timeline
+
 ## Initialize particle cloud
 
 We will iterate over the occupancy grid provided,
