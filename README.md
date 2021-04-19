@@ -2,7 +2,7 @@
 
 Team members: Evan Casey, Alex Oro
 
-![Recording](./Particle Trimmed Downscaled.gif)
+![Recording](./recording.gif)
 
 ## Objectives
 
