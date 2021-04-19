@@ -6,7 +6,7 @@ Team members: Evan Casey, Alex Oro
 
 ## Objectives
 
-To design and implement a robot localization algorithm based off of a particle cloud.
+To design and implement a robot localization algorithm based off of a particle cloud. The particle cloud will implement a likelihood field to figure out where the robot is actually located.
 
 **High Level Description**
 
