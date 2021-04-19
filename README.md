@@ -18,7 +18,7 @@ We were able to solve the problem of localization by using a likelihood filter s
 
 Occurs in the function *initialize_particle_cloud()*.
 
-We achieve this by first creating a list of tiles that are empty and thus are potential possible locations for the robot to be. Then we use numpy’s *random.choice()* function to choose a random selection of 10000 positions from this list. Lastly we create a random angle and use it to create a random orientation for each particle.
+We achieve this by first creating a list of tiles that are empty and thus are potential possible locations for the robot to be. Then we use numpy’s *random.choice()* function to choose a random selection of 10000 positions from this list. Lastly we generated random angles and used them to give each particle a random yaw.
 
 **Movement Model**
 
